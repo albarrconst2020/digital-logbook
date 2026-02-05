@@ -36,6 +36,11 @@ export default function DashboardPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
+  // New: INSIDE Duration Filter
+  const [insideDurationFilter, setInsideDurationFilter] = useState<
+    "ALL" | "<24" | "1-3" | ">5"
+  >("ALL");
+
   const getLogTime = (log: VehicleLog) => log.timeIn ?? log.timeOut ?? null;
 
   /* ---------------- Load logs ---------------- */
@@ -116,6 +121,18 @@ export default function DashboardPage() {
       const last: Record<string, VehicleLog> = {};
       logs.forEach((l) => (last[l.plateNumber] = l));
       list = Object.values(last).filter((l) => l.status === "IN");
+
+      // Apply INSIDE Duration Filter
+      if (insideDurationFilter !== "ALL") {
+        list = list.filter((v) => {
+          if (!v.timeIn) return false;
+          const durationHours = (new Date().getTime() - v.timeIn.getTime()) / (1000 * 60 * 60);
+          if (insideDurationFilter === "<24") return durationHours < 24;
+          if (insideDurationFilter === "1-3") return durationHours >= 24 && durationHours <= 72;
+          if (insideDurationFilter === ">5") return durationHours > 120;
+          return true;
+        });
+      }
     } else if (mode === "VEHICLE_LIST") {
       list = logs;
     }
@@ -250,13 +267,29 @@ export default function DashboardPage() {
             mode === "EXIT" ||
             mode === "INSIDE" ||
             mode === "VEHICLE_LIST") && (
-            <input
-              type="text"
-              placeholder="Search plate, owner, type..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border rounded px-3 py-1 w-full sm:w-64"
-            />
+            <>
+              <input
+                type="text"
+                placeholder="Search plate, owner, type..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="border rounded px-3 py-1 w-full sm:w-64"
+              />
+              {mode === "INSIDE" && (
+                <select
+                  value={insideDurationFilter}
+                  onChange={(e) =>
+                    setInsideDurationFilter(e.target.value as any)
+                  }
+                  className="border rounded px-3 py-1"
+                >
+                  <option value="ALL">All Durations</option>
+                  <option value="<24">Less than 24 hrs</option>
+                  <option value="1-3">1–3 days</option>
+                  <option value=">5">More than 5 days</option>
+                </select>
+              )}
+            </>
           )}
         </div>
       )}
