@@ -60,6 +60,7 @@ export default function ExitPage() {
     return () => unsub();
   }, [router]);
 
+  /* ---------- Fetch vehicle ---------- */
   const fetchVehicle = async () => {
     if (!plateNumber) return;
     setLoading(true);
@@ -71,7 +72,7 @@ export default function ExitPage() {
     const sanitize = (val?: string) => (val ? val.trim() : "");
 
     try {
-      // Registered vehicles
+      // 1️⃣ Check registered vehicles
       const qVehicle = query(
         collection(db, "vehicles"),
         where("plateNumber", "==", plate)
@@ -93,7 +94,7 @@ export default function ExitPage() {
         return;
       }
 
-      // Unregistered vehicles: last IN log
+      // 2️⃣ Check unregistered vehicles (last IN log)
       const qLog = query(
         collection(db, "vehicleLogs"),
         where("plateNumber", "==", plate),
@@ -113,6 +114,7 @@ export default function ExitPage() {
           details: sanitize(log.details) || "N/A",
           registered: false,
           status: "inside",
+          docId: snapLog.docs[0].id, // store log ID for exit update
         });
         setLoading(false);
         return;
@@ -127,6 +129,7 @@ export default function ExitPage() {
     }
   };
 
+  /* ---------- Exit vehicle ---------- */
   const exitVehicle = async () => {
     if (!vehicle) return;
     if (!auth.currentUser) return alert("User not authenticated");
@@ -137,29 +140,42 @@ export default function ExitPage() {
     const sanitize = (val?: string) => (val ? val.trim() : "");
 
     try {
+      // 1️⃣ Registered vehicle exit
       if (vehicle.registered && vehicle.docId) {
         const vehicleRef = doc(db, "vehicles", vehicle.docId);
         await updateDoc(vehicleRef, {
           status: "outside",
           lastExitAt: serverTimestamp(),
         });
+
+        // Log the exit
+        await addDoc(collection(db, "vehicleLogs"), {
+          plateNumber: sanitize(vehicle.plateNumber),
+          ownerName: sanitize(vehicle.ownerName),
+          vehicleType: sanitize(vehicle.vehicleType),
+          color: sanitize(vehicle.color),
+          details: sanitize(vehicle.details),
+          action: "exit",
+          status: "OUT",
+          timeOut: serverTimestamp(),
+          processedBy: currentUser.uid,
+          registered: true,
+        });
       }
 
-      await addDoc(collection(db, "vehicleLogs"), {
-        plateNumber: sanitize(vehicle.plateNumber),
-        ownerName: sanitize(vehicle.ownerName),
-        vehicleType: sanitize(vehicle.vehicleType),
-        color: sanitize(vehicle.color),
-        details: sanitize(vehicle.details),
-        action: "exit",
-        status: "OUT",
-        timeOut: serverTimestamp(),
-        processedBy: currentUser.uid,
-        registered: !!vehicle.registered,
-      });
+      // 2️⃣ Unregistered vehicle exit
+      if (!vehicle.registered && vehicle.docId) {
+        const logRef = doc(db, "vehicleLogs", vehicle.docId);
+        await updateDoc(logRef, {
+          status: "OUT",
+          timeOut: serverTimestamp(),
+          action: "exit",
+          processedBy: currentUser.uid,
+        });
+      }
 
-      // Reload page clean after exit
-      router.refresh();
+      // 3️⃣ Refetch vehicle to update UI
+      await fetchVehicle();
     } catch (err: any) {
       console.error("Error exiting vehicle:", err);
       setError("Error exiting vehicle: " + err.message);
@@ -187,13 +203,19 @@ export default function ExitPage() {
 
         <h1 className="text-2xl font-bold text-center mb-6">Vehicle Exit</h1>
 
+        {/* Mobile-friendly input */}
         <input
-          className="border p-2 w-full text-center uppercase rounded-lg mb-3"
+          className="border p-3 w-full text-center text-lg uppercase rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-black"
           placeholder="ENTER PLATE NUMBER"
           value={plateNumber}
           onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === "Enter" && fetchVehicle()}
+          inputMode="text"
+          autoCorrect="off"
+          spellCheck={false}
+          autoCapitalize="characters"
         />
+
         <button
           onClick={fetchVehicle}
           disabled={loading || !plateNumber}

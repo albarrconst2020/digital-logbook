@@ -18,12 +18,14 @@ import {
 import { auth, db } from "@/lib/auth";
 
 type Vehicle = {
+  docId?: string; // for registered vehicles
   plateNumber: string;
   ownerName: string;
   vehicleType: string;
   color: string;
   details?: string;
   status?: "inside" | "outside";
+  registered?: boolean;
 };
 
 export default function EntryPage() {
@@ -108,7 +110,7 @@ export default function EntryPage() {
     const normalizedPlate = normalizePlate(plateNumber);
 
     try {
-      // Check registered vehicles
+      // 1️⃣ Check registered vehicles
       const regQuery = query(
         collection(db, "vehicles"),
         where("plateNumber", "==", normalizedPlate)
@@ -116,7 +118,13 @@ export default function EntryPage() {
       const regSnap = await getDocs(regQuery);
 
       if (!regSnap.empty) {
-        const regVehicle = regSnap.docs[0].data() as Vehicle;
+        const regDoc = regSnap.docs[0];
+        const regVehicle = {
+          ...regDoc.data(),
+          docId: regDoc.id,
+          registered: true,
+        } as Vehicle;
+
         if (regVehicle.status === "inside") {
           showError("Registered vehicle is already inside");
         } else {
@@ -125,7 +133,7 @@ export default function EntryPage() {
         return;
       }
 
-      // Check unregistered vehicle status
+      // 2️⃣ Check unregistered vehicle status
       const unregRef = doc(db, "unregisteredVehicles", normalizedPlate);
       const unregSnap = await getDoc(unregRef);
 
@@ -134,7 +142,7 @@ export default function EntryPage() {
         return;
       }
 
-      setNotRegistered(true); // Can log as new unregistered
+      setNotRegistered(true); // allow logging as new unregistered
     } catch (err) {
       console.error(err);
       showError("Failed to check plate");
@@ -154,27 +162,16 @@ export default function EntryPage() {
     const normalizedPlate = normalizePlate(plateNumber);
 
     try {
-      if (vehicle) {
-        // Registered vehicle
-        const regQuery = query(
-          collection(db, "vehicles"),
-          where("plateNumber", "==", normalizedPlate)
-        );
-        const regSnap = await getDocs(regQuery);
-        if (regSnap.empty) throw new Error("Vehicle not found");
-
-        const regDoc = regSnap.docs[0];
-        if ((regDoc.data() as Vehicle).status === "inside") {
-          return showError("Registered vehicle is already inside");
-        }
-
-        await updateDoc(regDoc.ref, {
+      // 1️⃣ Registered vehicle
+      if (vehicle?.registered && vehicle.docId) {
+        const vehicleRef = doc(db, "vehicles", vehicle.docId);
+        await updateDoc(vehicleRef, {
           status: "inside",
           lastEntryAt: serverTimestamp(),
         });
 
         await addDoc(collection(db, "vehicleLogs"), {
-          vehicleId: regDoc.id,
+          vehicleId: vehicle.docId,
           plateNumber: normalizedPlate,
           ownerName: sanitize(vehicle.ownerName),
           vehicleType: sanitize(vehicle.vehicleType),
@@ -189,18 +186,14 @@ export default function EntryPage() {
         });
 
         showSuccess("Registered vehicle entry logged");
-      } else if (notRegistered) {
-        // Unregistered vehicle
+      }
+
+      // 2️⃣ Unregistered vehicle
+      else if (notRegistered) {
         if (!ownerName || !vehicleType || !color)
           return showError("Owner, type, and color are required");
 
         const unregRef = doc(db, "unregisteredVehicles", normalizedPlate);
-        const unregSnap = await getDoc(unregRef);
-
-        if (unregSnap.exists() && unregSnap.data()?.status === "inside") {
-          return showError("Unregistered vehicle is already inside");
-        }
-
         await setDoc(unregRef, { status: "inside" }, { merge: true });
 
         await addDoc(collection(db, "vehicleLogs"), {
@@ -254,12 +247,16 @@ export default function EntryPage() {
         <label className="text-sm font-medium">Plate Number</label>
         <input
           ref={plateInputRef}
-          className="w-full text-lg uppercase px-4 py-3 border rounded-xl
-                     focus:ring-2 focus:ring-green-500"
+          className="w-full text-lg uppercase px-4 py-3 border rounded-xl mb-3
+                     focus:outline-none focus:ring-2 focus:ring-green-500"
           placeholder="ABC1234 / 123ABC"
           value={plateNumber}
           onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === "Enter" && fetchVehicle()}
+          inputMode="text"
+          autoCorrect="off"
+          spellCheck={false}
+          autoCapitalize="characters"
         />
 
         <button
