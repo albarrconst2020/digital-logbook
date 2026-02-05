@@ -18,7 +18,7 @@ import {
 import { auth, db } from "@/lib/auth";
 
 type Vehicle = {
-  docId?: string; // for registered vehicles
+  docId?: string;
   plateNumber: string;
   ownerName: string;
   vehicleType: string;
@@ -43,8 +43,8 @@ export default function EntryPage() {
   const [vehicleType, setVehicleType] = useState("");
   const [color, setColor] = useState("");
   const [details, setDetails] = useState("");
+  const [purpose, setPurpose] = useState("");
 
-  /* ---------- Helpers ---------- */
   const normalizePlate = (plate: string) =>
     plate.trim().toUpperCase().replace(/\s+/g, "");
 
@@ -65,12 +65,11 @@ export default function EntryPage() {
     setVehicleType("");
     setColor("");
     setDetails("");
+    setPurpose("");
     setError("");
     setNotRegistered(false);
 
-    setTimeout(() => {
-      plateInputRef.current?.focus();
-    }, 100);
+    setTimeout(() => plateInputRef.current?.focus(), 100);
   };
 
   /* ---------- Auth + Role Guard ---------- */
@@ -133,16 +132,29 @@ export default function EntryPage() {
         return;
       }
 
-      // 2️⃣ Check unregistered vehicle status
+      // 2️⃣ Check unregistered vehicle
       const unregRef = doc(db, "unregisteredVehicles", normalizedPlate);
       const unregSnap = await getDoc(unregRef);
 
-      if (unregSnap.exists() && unregSnap.data()?.status === "inside") {
-        showError("Unregistered vehicle is already inside");
+      if (unregSnap.exists()) {
+        const data = unregSnap.data();
+        if (data.status === "inside") {
+          showError("Unregistered vehicle is already inside");
+          return;
+        }
+
+        // Pre-fill last info
+        setOwnerName(data.ownerName || "");
+        setVehicleType(data.vehicleType || "");
+        setColor(data.color || "");
+        setDetails(data.details || "");
+        showSuccess("Previous info loaded. Please enter purpose for this entry.");
+        setNotRegistered(true);
         return;
       }
 
-      setNotRegistered(true); // allow logging as new unregistered
+      // New unregistered vehicle
+      setNotRegistered(true);
     } catch (err) {
       console.error(err);
       showError("Failed to check plate");
@@ -182,7 +194,7 @@ export default function EntryPage() {
           timeIn: serverTimestamp(),
           enteredBy: auth.currentUser.uid,
           registered: true,
-          purpose: "N/A",
+          purpose: sanitize(purpose) || "N/A",
         });
 
         showSuccess("Registered vehicle entry logged");
@@ -194,7 +206,17 @@ export default function EntryPage() {
           return showError("Owner, type, and color are required");
 
         const unregRef = doc(db, "unregisteredVehicles", normalizedPlate);
-        await setDoc(unregRef, { status: "inside" }, { merge: true });
+        await setDoc(
+          unregRef,
+          {
+            ownerName: sanitize(ownerName),
+            vehicleType: sanitize(vehicleType),
+            color: sanitize(color),
+            details: sanitize(details),
+            status: "inside",
+          },
+          { merge: true }
+        );
 
         await addDoc(collection(db, "vehicleLogs"), {
           plateNumber: normalizedPlate,
@@ -207,7 +229,7 @@ export default function EntryPage() {
           timeIn: serverTimestamp(),
           enteredBy: auth.currentUser.uid,
           registered: false,
-          purpose: "N/A",
+          purpose: sanitize(purpose) || "N/A",
         });
 
         showSuccess("Unregistered vehicle entry logged");
@@ -235,14 +257,11 @@ export default function EntryPage() {
       </div>
 
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-6">
-        {/* Logo */}
         <div className="flex justify-center mb-4">
           <img src="/zcmc.png" alt="ZCMC Logo" className="h-16 w-auto" />
         </div>
 
-        <h1 className="text-2xl font-bold text-center mb-6">
-          Vehicle Entry
-        </h1>
+        <h1 className="text-2xl font-bold text-center mb-6">Vehicle Entry</h1>
 
         <label className="text-sm font-medium">Plate Number</label>
         <input
@@ -274,6 +293,13 @@ export default function EntryPage() {
             <p><b>Owner:</b> {vehicle.ownerName}</p>
             <p><b>Type:</b> {vehicle.vehicleType}</p>
             <p><b>Color:</b> {vehicle.color}</p>
+
+            <input
+              className="w-full mb-2 p-2 border rounded"
+              placeholder="Purpose"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+            />
 
             <button
               onClick={logEntry}
@@ -310,6 +336,12 @@ export default function EntryPage() {
               placeholder="Details (optional)"
               value={details}
               onChange={(e) => setDetails(e.target.value)}
+            />
+            <input
+              className="w-full mb-2 p-2 border rounded"
+              placeholder="Purpose"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
             />
 
             <button
