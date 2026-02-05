@@ -1,0 +1,192 @@
+this is dashboard/page.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { auth } from "../../lib/auth";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { app } from "../../lib/firebaseConfig";
+import VehicleForm from "./VehicleForm";
+import VehicleList from "./VehicleList";
+
+export default function DashboardPage() {
+  const [role, setRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const db = getFirestore(app);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists() && snap.data().role) {
+          setRole(snap.data().role.toLowerCase());
+        } else {
+          setRole("unknown");
+        }
+      } catch (e) {
+        console.error("Role fetch failed", e);
+        setRole("unknown");
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [db]);
+
+  if (loading) return <div>Loading dashboard...</div>;
+
+  const canEnter = role === "entrance" || role === "admin";
+
+  return (
+    <div className="p-4 space-y-6">
+      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <p>Your role: <strong>{role}</strong></p>
+
+      {canEnter && <VehicleForm />}
+
+      <VehicleList />
+    </div>
+  );
+}
+
+
+This is VehicleForm.tsx
+
+"use client";
+
+import { useState } from "react";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { auth } from "../../lib/auth";
+import { db } from "../../lib/firebaseConfig";
+
+export default function VehicleForm() {
+  const [plateNumber, setPlateNumber] = useState("");
+  const [vehicleType, setVehicleType] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!plateNumber || !vehicleType) return;
+
+    setSaving(true);
+
+    try {
+      await addDoc(collection(db, "vehicles"), {
+        plateNumber,
+        vehicleType,
+        purpose,
+        remarks,
+        status: "IN",
+        enteredBy: auth.currentUser?.uid,
+        exitedBy: null,
+        timeIn: serverTimestamp(),
+        timeOut: null,
+      });
+
+      setPlateNumber("");
+      setVehicleType("");
+      setPurpose("");
+      setRemarks("");
+    } catch (err) {
+      console.error("Add vehicle failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="border p-4 rounded space-y-3">
+      <h2 className="font-semibold">Vehicle Entry</h2>
+
+      <input
+        className="border p-2 w-full"
+        placeholder="Plate Number"
+        value={plateNumber}
+        onChange={(e) => setPlateNumber(e.target.value)}
+      />
+
+      <input
+        className="border p-2 w-full"
+        placeholder="Vehicle Type"
+        value={vehicleType}
+        onChange={(e) => setVehicleType(e.target.value)}
+      />
+
+      <input
+        className="border p-2 w-full"
+        placeholder="Purpose"
+        value={purpose}
+        onChange={(e) => setPurpose(e.target.value)}
+      />
+
+      <input
+        className="border p-2 w-full"
+        placeholder="Remarks"
+        value={remarks}
+        onChange={(e) => setRemarks(e.target.value)}
+      />
+
+      <button
+        disabled={saving}
+        className="bg-black text-white px-4 py-2 rounded"
+      >
+        {saving ? "Saving..." : "Log Vehicle"}
+      </button>
+    </form>
+  );
+}
+
+
+
+this is VehicleList.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db } from "../../lib/firebaseConfig";
+
+export default function VehicleList() {
+  const [vehicles, setVehicles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "vehicles"),
+      orderBy("timeIn", "desc")
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      setVehicles(snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })));
+    });
+
+    return () => unsub();
+  }, []);
+
+  return (
+    <div className="border p-4 rounded">
+      <h2 className="text-xl font-bold mb-2">Vehicle Log</h2>
+
+      {vehicles.map((v) => (
+        <div key={v.id} className="border-b p-2">
+          <strong>{v.plateNumber}</strong> ({v.vehicleType})<br />
+          Status: {v.status}<br />
+          Time In: {v.timeIn?.toDate?.().toLocaleString() || "-"}<br />
+          Time Out: {v.timeOut?.toDate?.().toLocaleString() || "-"}
+        </div>
+      ))}
+    </div>
+  );
+}
+
