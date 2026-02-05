@@ -25,25 +25,14 @@ type DashboardMode =
 export default function DashboardPage() {
   const [logs, setLogs] = useState<VehicleLog[]>([]);
   const [insideCount, setInsideCount] = useState(0);
-  const [selectedList, setSelectedList] = useState<VehicleLog[]>([]);
   const [mode, setMode] = useState<DashboardMode>("NONE");
+
   const [fromDate, setFromDate] = useState(new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(new Date().toISOString().slice(0, 10));
   const [searchQuery, setSearchQuery] = useState("");
+
   const [historyPlate, setHistoryPlate] = useState("");
-  const [historyLogs, setHistoryLogs] = useState<
-    {
-      id: string;
-      action?: string;
-      status?: string;
-      ownerName?: string;
-      vehicleType?: string;
-      color?: string;
-      details?: string;
-      timeIn?: { toDate: () => Date };
-      timeOut?: { toDate: () => Date };
-    }[]
-  >([]);
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
@@ -54,28 +43,28 @@ export default function DashboardPage() {
     const unsub = onSnapshot(collection(db, "vehicleLogs"), (snap) => {
       const allLogs: VehicleLog[] = snap.docs
         .map((doc) => {
-          const data = doc.data();
+          const d = doc.data();
           return {
-            plateNumber: data.plateNumber,
-            status: data.status,
-            ownerName: data.ownerName,
-            vehicleType: data.vehicleType,
-            color: data.color,
-            details: data.details,
-            timeIn: data.timeIn?.toDate(),
-            timeOut: data.timeOut?.toDate(),
-            registered: data.registered ?? !!data.ownerName,
+            plateNumber: d.plateNumber,
+            status: d.status,
+            ownerName: d.ownerName,
+            vehicleType: d.vehicleType,
+            color: d.color,
+            details: d.details,
+            timeIn: d.timeIn?.toDate(),
+            timeOut: d.timeOut?.toDate(),
+            registered: d.registered ?? !!d.ownerName,
           } as VehicleLog;
         })
-        .filter((log) => log.timeIn || log.timeOut)
+        .filter((l) => l.timeIn || l.timeOut)
         .sort((a, b) => (getLogTime(a)?.getTime() ?? 0) - (getLogTime(b)?.getTime() ?? 0));
 
       setLogs(allLogs);
 
       const lastLogByPlate: Record<string, VehicleLog> = {};
-      allLogs.forEach((log) => (lastLogByPlate[log.plateNumber] = log));
+      allLogs.forEach((l) => (lastLogByPlate[l.plateNumber] = l));
       setInsideCount(
-        Object.values(lastLogByPlate).filter((log) => log.status === "IN").length
+        Object.values(lastLogByPlate).filter((l) => l.status === "IN").length
       );
     });
 
@@ -84,20 +73,20 @@ export default function DashboardPage() {
 
   /* ---------------- Dashboard blocks ---------------- */
   const dashboardBlocks = [
-    { label: "Entry Vehicles", mode: "ENTRY" as DashboardMode, image: "/images/entry.png" },
-    { label: "Exit Vehicles", mode: "EXIT" as DashboardMode, image: "/images/exit.png" },
-    { label: "Vehicles Inside", mode: "INSIDE" as DashboardMode, image: "/images/inside1.png" },
-    { label: "Hourly Traffic", mode: "HOURLY_TRAFFIC" as DashboardMode, image: "/images/hourly1.png" },
-    { label: "Registered vs Unregistered", mode: "PIE_REGISTERED" as DashboardMode, image: "/images/pie1.png" },
-    { label: "Inside Duration", mode: "BAR_DURATION" as DashboardMode, image: "/images/bar1.png" },
-    { label: "Vehicle List", mode: "VEHICLE_LIST" as DashboardMode, image: "/images/list1.png" },
-    { label: "Vehicle History", mode: "VEHICLE_HISTORY" as DashboardMode, image: "/images/history1.png" },
+    { label: "Entry Vehicles", mode: "ENTRY", image: "/images/entry.png" },
+    { label: "Exit Vehicles", mode: "EXIT", image: "/images/exit.png" },
+    { label: "Vehicles Inside", mode: "INSIDE", image: "/images/inside1.png" },
+    { label: "Hourly Traffic", mode: "HOURLY_TRAFFIC", image: "/images/hourly1.png" },
+    { label: "Registered vs Unregistered", mode: "PIE_REGISTERED", image: "/images/pie1.png" },
+    { label: "Inside Duration", mode: "BAR_DURATION", image: "/images/bar1.png" },
+    { label: "Vehicle List", mode: "VEHICLE_LIST", image: "/images/list1.png" },
+    { label: "Vehicle History", mode: "VEHICLE_HISTORY", image: "/images/history1.png" },
   ];
 
   const chartLogs = logs.filter(
-    (log) =>
-      (!log.timeIn || log.timeIn.toISOString().slice(0, 10) >= fromDate) &&
-      (!log.timeOut || log.timeOut.toISOString().slice(0, 10) <= toDate)
+    (l) =>
+      (!l.timeIn || l.timeIn.toISOString().slice(0, 10) >= fromDate) &&
+      (!l.timeOut || l.timeOut.toISOString().slice(0, 10) <= toDate)
   );
 
   const handleLogout = async () => {
@@ -105,87 +94,73 @@ export default function DashboardPage() {
     location.reload();
   };
 
-  /* ---------------- Filter logic ---------------- */
+  /* ---------------- Filtered List ---------------- */
   const filteredList = (() => {
-    let list = selectedList;
+    let list: VehicleLog[] = [];
+
     if (mode === "ENTRY") {
       list = logs.filter(
-        (log) =>
-          log.timeIn &&
-          log.timeIn.toISOString().slice(0, 10) >= fromDate &&
-          log.timeIn.toISOString().slice(0, 10) <= toDate
+        (l) =>
+          l.timeIn &&
+          l.timeIn.toISOString().slice(0, 10) >= fromDate &&
+          l.timeIn.toISOString().slice(0, 10) <= toDate
       );
     } else if (mode === "EXIT") {
       list = logs.filter(
-        (log) =>
-          log.timeOut &&
-          log.timeOut.toISOString().slice(0, 10) >= fromDate &&
-          log.timeOut.toISOString().slice(0, 10) <= toDate
+        (l) =>
+          l.timeOut &&
+          l.timeOut.toISOString().slice(0, 10) >= fromDate &&
+          l.timeOut.toISOString().slice(0, 10) <= toDate
       );
     } else if (mode === "INSIDE") {
-      const lastLogByPlate: Record<string, VehicleLog> = {};
-      logs.forEach((log) => (lastLogByPlate[log.plateNumber] = log));
-      list = Object.values(lastLogByPlate).filter((log) => log.status === "IN" && log.timeIn);
+      const last: Record<string, VehicleLog> = {};
+      logs.forEach((l) => (last[l.plateNumber] = l));
+      list = Object.values(last).filter((l) => l.status === "IN");
     } else if (mode === "VEHICLE_LIST") {
       list = logs;
     }
-    return list.filter((v) => {
-      const q = searchQuery.toLowerCase();
-      return (
+
+    const q = searchQuery.toLowerCase();
+    return list.filter(
+      (v) =>
         v.plateNumber.toLowerCase().includes(q) ||
-        (v.ownerName?.toLowerCase().includes(q) ?? false) ||
-        (v.vehicleType?.toLowerCase().includes(q) ?? false)
-      );
-    });
+        v.ownerName?.toLowerCase().includes(q) ||
+        v.vehicleType?.toLowerCase().includes(q)
+    );
   })();
 
-  /* ---------------- Vehicle History fetch ---------------- */
+  /* ---------------- Vehicle History ---------------- */
   const normalizePlate = (p: string) => p.trim().toUpperCase().replace(/\s+/g, "");
+
   const fetchHistory = async () => {
     if (!historyPlate) return;
     setHistoryLoading(true);
     setHistoryError("");
     setHistoryLogs([]);
+
     try {
       const q = query(
         collection(db, "vehicleLogs"),
         where("plateNumber", "==", normalizePlate(historyPlate))
       );
       const snap = await getDocs(q);
+
       if (snap.empty) {
         setHistoryError("No logs found for this vehicle");
       } else {
-        const data = snap.docs.map(doc => {
-          const d = doc.data() as {
-            action?: string;
-            status?: string;
-            ownerName?: string;
-            vehicleType?: string;
-            color?: string;
-            details?: string;
-            timeIn?: { toDate: () => Date };
-            timeOut?: { toDate: () => Date };
+        const data = snap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            ...d,
+            time: d.timeIn?.toDate() ?? d.timeOut?.toDate(),
           };
-          return { id: doc.id, ...d };
-        });
-        data.sort((a, b) => {
-          const ta =
-            a.timeOut?.toDate()?.getTime() ??
-            a.timeIn?.toDate()?.getTime() ??
-            0;
-
-          const tb =
-            b.timeOut?.toDate()?.getTime() ??
-            b.timeIn?.toDate()?.getTime() ??
-            0;
-
-          return tb - ta;
         });
 
+        data.sort((a, b) => (b.time?.getTime() ?? 0) - (a.time?.getTime() ?? 0));
         setHistoryLogs(data);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       setHistoryError("Failed to fetch logs");
     } finally {
       setHistoryLoading(false);
@@ -198,92 +173,127 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-3">
         <div className="flex items-center gap-3">
           <Image src="/images/zcmc1.png" alt="ZCMC Logo" width={50} height={50} />
-          <h1 className="text-2xl sm:text-3xl font-bold text-center sm:text-left">
+          <h1 className="text-2xl sm:text-3xl font-bold">
             ZCMC Vehicle E-Logbook
           </h1>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => window.open("/dashboard/vehicle-registration", "_blank")}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition w-full sm:w-auto"
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           >
             Register Vehicle
           </button>
           <button
             onClick={handleLogout}
-            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition w-full sm:w-auto"
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
           >
             Logout
           </button>
         </div>
       </div>
 
-      {/* Summary Cards */}
       <SummaryCards logs={logs} insideCount={insideCount} onSelect={() => {}} />
 
-      {/* Dashboard blocks (2x4 grid) */}
+      {/* Dashboard Blocks */}
       <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {dashboardBlocks.map((block) => (
+        {dashboardBlocks.map((b) => (
           <button
-            key={block.label}
+            key={b.label}
             onClick={() => {
-              if (block.mode === "VEHICLE_LIST") {
+              if (b.mode === "VEHICLE_LIST") {
                 window.open("/dashboard/vehicles", "_blank");
               } else {
-                setMode(block.mode);
+                setMode(b.mode as DashboardMode);
                 setSearchQuery("");
-                if (block.mode === "VEHICLE_HISTORY") {
-                  setHistoryLogs([]);
-                  setHistoryPlate("");
-                  setHistoryError("");
-                }
               }
             }}
             className={`rounded-xl border p-4 flex flex-col items-center justify-center
-              transition-all duration-300 ease-out transform hover:scale-105
-              shadow-sm hover:shadow-xl cursor-pointer
-              ${mode === block.mode ? "border-blue-500 bg-blue-50" : "bg-white"}`}
+              transition hover:scale-105 shadow-sm hover:shadow-xl
+              ${mode === b.mode ? "border-blue-500 bg-blue-50" : "bg-white"}`}
           >
-            <div className="relative h-28 w-28 mb-2">
-              <Image src={block.image} alt={block.label} fill className="object-contain" />
+            <div className="relative h-24 w-24 mb-2">
+              <Image src={b.image} alt={b.label} fill className="object-contain" />
             </div>
-            <span className="font-semibold text-gray-700 text-center text-sm sm:text-base">
-              {block.label}
+            <span className="font-semibold text-gray-700 text-sm text-center">
+              {b.label}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Filters / Tables / Vehicle History */}
-      <div className="mt-6">
-        {/* ENTRY / EXIT / INSIDE / VEHICLE LIST */}
-        {mode !== "VEHICLE_HISTORY" && (mode !== "NONE" && mode !== "HOURLY_TRAFFIC" && mode !== "PIE_REGISTERED" && mode !== "BAR_DURATION") && (
-          <div className="overflow-x-auto bg-white rounded shadow">
-            <div className="flex gap-2 p-4">
-              {(mode === "ENTRY" || mode === "EXIT" || mode === "INSIDE" || mode === "VEHICLE_LIST") && (
-                <input
-                  type="text"
-                  placeholder="Search plate, owner, type..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="border rounded px-3 py-1 w-full sm:w-64"
-                />
-              )}
-            </div>
-            <table className="min-w-full">
-              <thead className="bg-green-400 text-white">
-                <tr>
-                  <th className="border px-4 py-2">Plate</th>
-                  <th className="border px-4 py-2">Owner</th>
-                  <th className="border px-4 py-2">Type</th>
-                  <th className="border px-4 py-2">Color</th>
-                  <th className="border px-4 py-2">Details</th>
-                  <th className="border px-4 py-2">{mode === "INSIDE" ? "Status" : "Date & Time"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredList.map((v) => (
-                  <tr key={`${v.plateNumber}-${getLogTime(v)?.getTime()}`} className="text-center">
+      {/* FILTER BAR */}
+      {(mode !== "NONE" && mode !== "VEHICLE_HISTORY") && (
+        <div className="mt-6 bg-white rounded shadow p-4 flex flex-wrap gap-2 items-center">
+          {(mode === "ENTRY" ||
+            mode === "EXIT" ||
+            mode === "HOURLY_TRAFFIC" ||
+            mode === "PIE_REGISTERED" ||
+            mode === "BAR_DURATION") && (
+            <>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="border rounded px-3 py-1"
+              />
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="border rounded px-3 py-1"
+              />
+            </>
+          )}
+
+          {(mode === "ENTRY" ||
+            mode === "EXIT" ||
+            mode === "INSIDE" ||
+            mode === "VEHICLE_LIST") && (
+            <input
+              type="text"
+              placeholder="Search plate, owner, type..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="border rounded px-3 py-1 w-full sm:w-64"
+            />
+          )}
+        </div>
+      )}
+
+      {/* TABLE */}
+      {(mode === "ENTRY" || mode === "EXIT" || mode === "INSIDE" || mode === "VEHICLE_LIST") && (
+        <div className="mt-4 overflow-x-auto bg-white rounded shadow">
+          <table className="min-w-full text-center">
+            <thead className="bg-green-400 text-white">
+              <tr>
+                <th className="border px-4 py-2">Plate</th>
+                <th className="border px-4 py-2">Owner</th>
+                <th className="border px-4 py-2">Type</th>
+                <th className="border px-4 py-2">Color</th>
+                <th className="border px-4 py-2">Details</th>
+                <th className="border px-4 py-2">
+                  {mode === "INSIDE" ? "Registration / Duration" : "Date & Time"}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredList.map((v) => {
+                let isLongInside = false;
+                let durationText = "";
+                if (mode === "INSIDE" && v.timeIn) {
+                  const durationHours = (new Date().getTime() - v.timeIn.getTime()) / (1000 * 60 * 60);
+                  isLongInside = durationHours >= 120; // 5 days threshold
+                  durationText = durationHours >= 24
+                    ? `${(durationHours / 24).toFixed(2)} days`
+                    : `${durationHours.toFixed(2)} hrs`;
+                }
+
+                return (
+                  <tr
+                    key={`${v.plateNumber}-${getLogTime(v)?.getTime()}`}
+                    className={isLongInside ? "bg-red-100" : ""}
+                  >
                     <td className="border px-4 py-2">{v.plateNumber}</td>
                     <td className="border px-4 py-2">{v.ownerName || "—"}</td>
                     <td className="border px-4 py-2">{v.vehicleType || "—"}</td>
@@ -291,95 +301,102 @@ export default function DashboardPage() {
                     <td className="border px-4 py-2">{v.details || "—"}</td>
                     <td className="border px-4 py-2">
                       {mode === "INSIDE"
-                        ? v.registered ? <span className="text-green-600 font-semibold">Registered</span> : <span className="text-red-600 font-semibold">Unregistered</span>
-                        : mode === "ENTRY" ? v.timeIn?.toLocaleString() : v.timeOut?.toLocaleString()}
+                        ? `${v.registered ? "Registered" : "Unregistered"} (${durationText})`
+                        : mode === "ENTRY"
+                        ? v.timeIn?.toLocaleString()
+                        : v.timeOut?.toLocaleString()}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* CHARTS */}
+      {mode === "PIE_REGISTERED" && (
+        <div className="mt-6 bg-white rounded shadow p-4">
+          <PieChartRegistered logs={chartLogs} />
+        </div>
+      )}
+
+      {mode === "BAR_DURATION" && (
+        <div className="mt-6 bg-white rounded shadow p-4">
+          <BarChartDuration logs={logs} />
+        </div>
+      )}
+
+      {mode === "HOURLY_TRAFFIC" && (
+        <div className="mt-6 bg-white rounded shadow p-4">
+          <TrafficGraph
+            logs={chartLogs}
+            fromDate={new Date(fromDate)}
+            toDate={new Date(toDate)}
+          />
+        </div>
+      )}
+
+      {/* VEHICLE HISTORY */}
+      {mode === "VEHICLE_HISTORY" && (
+        <div className="mt-6 bg-white rounded shadow p-6">
+          <h2 className="text-xl font-semibold text-center mb-4">
+            Vehicle History Lookup
+          </h2>
+          <div className="flex justify-center gap-2 mb-4">
+            <input
+              className="border rounded px-3 py-1 uppercase text-center"
+              placeholder="Enter Plate Number"
+              value={historyPlate}
+              onChange={(e) => setHistoryPlate(e.target.value)}
+            />
+            <button
+              onClick={fetchHistory}
+              disabled={historyLoading || !historyPlate}
+              className="bg-blue-600 text-white px-4 py-1 rounded disabled:bg-gray-400"
+            >
+              {historyLoading ? "Fetching..." : "Lookup"}
+            </button>
           </div>
-        )}
 
-        {/* VEHICLE HISTORY */}
-        {mode === "VEHICLE_HISTORY" && (
-          <div className="bg-white rounded shadow p-6">
-            <h2 className="text-xl font-semibold mb-4 text-center">Vehicle History Lookup</h2>
-            <div className="flex gap-2 mb-4 justify-center">
-              <input
-                className="border rounded px-3 py-1 uppercase w-64 text-center"
-                placeholder="Enter Plate Number"
-                value={historyPlate}
-                onChange={(e) => setHistoryPlate(e.target.value)}
-              />
-              <button
-                className={`px-4 py-1 rounded text-white ${historyLoading || !historyPlate ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600"}`}
-                onClick={fetchHistory}
-                disabled={historyLoading || !historyPlate}
-              >
-                {historyLoading ? "Fetching..." : "Lookup"}
-              </button>
-            </div>
+          {historyError && (
+            <p className="text-red-600 text-center">{historyError}</p>
+          )}
 
-            {historyError && <p className="text-red-600 text-center mb-4">{historyError}</p>}
-
-            {historyLogs.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-center border-collapse border border-gray-300">
-                  <thead className="bg-gray-200">
-                    <tr>
-                      <th className="border px-2 py-1">Action</th>
-                      <th className="border px-2 py-1">Status</th>
-                      <th className="border px-2 py-1">Owner</th>
-                      <th className="border px-2 py-1">Type</th>
-                      <th className="border px-2 py-1">Color</th>
-                      <th className="border px-2 py-1">Details</th>
-                      <th className="border px-2 py-1">Time</th>
+          {historyLogs.length > 0 && (
+            <div className="overflow-x-auto mt-4">
+              <table className="min-w-full text-center border">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th className="border px-2 py-1">Action</th>
+                    <th className="border px-2 py-1">Status</th>
+                    <th className="border px-2 py-1">Owner</th>
+                    <th className="border px-2 py-1">Type</th>
+                    <th className="border px-2 py-1">Color</th>
+                    <th className="border px-2 py-1">Details</th>
+                    <th className="border px-2 py-1">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyLogs.map((l) => (
+                    <tr key={l.id}>
+                      <td className="border px-2 py-1">{l.action || "—"}</td>
+                      <td className="border px-2 py-1">{l.status || "—"}</td>
+                      <td className="border px-2 py-1">{l.ownerName || "—"}</td>
+                      <td className="border px-2 py-1">{l.vehicleType || "—"}</td>
+                      <td className="border px-2 py-1">{l.color || "—"}</td>
+                      <td className="border px-2 py-1">{l.details || "—"}</td>
+                      <td className="border px-2 py-1">
+                        {l.time?.toLocaleString() || "—"}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {historyLogs.map((log) => (
-                      <tr key={log.id} className="border hover:bg-gray-50">
-                        <td className="border px-2 py-1">{log.action || "—"}</td>
-                        <td className="border px-2 py-1">{log.status || "—"}</td>
-                        <td className="border px-2 py-1">{log.ownerName || "—"}</td>
-                        <td className="border px-2 py-1">{log.vehicleType || "—"}</td>
-                        <td className="border px-2 py-1">{log.color || "—"}</td>
-                        <td className="border px-2 py-1">{log.details || "—"}</td>
-                        <td className="border px-2 py-1">
-                          {log.timeIn ? log.timeIn.toDate().toLocaleString() : log.timeOut?.toDate?.().toLocaleString() || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* PIE / BAR / HOURLY */}
-        {mode === "PIE_REGISTERED" && (
-          <div className="bg-white rounded shadow p-4 mb-6">
-            <h2 className="text-xl font-semibold mb-4 text-center">Registered vs Unregistered</h2>
-            <PieChartRegistered logs={chartLogs} />
-          </div>
-        )}
-
-        {mode === "BAR_DURATION" && (
-          <div className="bg-white rounded shadow p-4 mb-6">
-            <h2 className="text-xl font-semibold mb-4 text-center">Inside Duration</h2>
-            <BarChartDuration logs={logs} />
-          </div>
-        )}
-
-        {mode === "HOURLY_TRAFFIC" && (
-          <div className="bg-white rounded shadow p-4 mb-6">
-            <h2 className="text-xl font-semibold mb-4 text-center">Hourly Traffic</h2>
-            <TrafficGraph logs={chartLogs} fromDate={new Date(fromDate)} toDate={new Date(toDate)} />
-          </div>
-        )}
-      </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
