@@ -81,6 +81,7 @@ export default function ExitPage() {
       const snap = await getDocs(q);
 
       if (snap.empty) {
+        // Plate not found => show simple message
         setError("No record found");
         setLoading(false);
         return;
@@ -130,6 +131,7 @@ export default function ExitPage() {
           lastExitAt: serverTimestamp(),
         });
       } else {
+        // unregistered vehicle => track separately
         await updateDoc(
           doc(db, "unregisteredVehicles", vehicle.plateNumber),
           { status: "outside" }
@@ -187,7 +189,10 @@ export default function ExitPage() {
           className="border p-3 w-full text-center text-lg uppercase rounded-lg mb-3"
           placeholder="ENTER PLATE NUMBER"
           value={plateNumber}
-          onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+          onChange={(e) => {
+            // ZTE input fix: clear only if user really deletes, prevent jumpy erase
+            setPlateNumber(e.target.value.toUpperCase());
+          }}
           onKeyDown={(e) => e.key === "Enter" && fetchVehicle()}
         />
 
