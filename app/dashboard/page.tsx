@@ -10,6 +10,7 @@ import BarChartDuration from "@/components/dashboard/BarChartDuration";
 import { VehicleLog } from "@/types";
 import Image from "next/image";
 import { signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 type DashboardMode =
   | "NONE"
@@ -30,16 +31,14 @@ export default function DashboardPage() {
   const [fromDate, setFromDate] = useState(new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(new Date().toISOString().slice(0, 10));
   const [searchQuery, setSearchQuery] = useState("");
+  const [minDurationHours, setMinDurationHours] = useState(0); // For INSIDE filter
 
   const [historyPlate, setHistoryPlate] = useState("");
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
-  // New: INSIDE Duration Filter
-  const [insideDurationFilter, setInsideDurationFilter] = useState<
-    "ALL" | "<24" | "1-3" | ">5"
-  >("ALL");
+  const router = useRouter(); // For redirect after logout
 
   const getLogTime = (log: VehicleLog) => log.timeIn ?? log.timeOut ?? null;
 
@@ -94,9 +93,15 @@ export default function DashboardPage() {
       (!l.timeOut || l.timeOut.toISOString().slice(0, 10) <= toDate)
   );
 
+  /* ---------------- Logout ---------------- */
   const handleLogout = async () => {
-    await signOut(auth);
-    location.reload();
+    try {
+      await signOut(auth);
+      router.push("/"); // Redirect to login page
+    } catch (err) {
+      console.error("Logout failed:", err);
+      alert("Failed to logout. Please try again.");
+    }
   };
 
   /* ---------------- Filtered List ---------------- */
@@ -120,19 +125,13 @@ export default function DashboardPage() {
     } else if (mode === "INSIDE") {
       const last: Record<string, VehicleLog> = {};
       logs.forEach((l) => (last[l.plateNumber] = l));
-      list = Object.values(last).filter((l) => l.status === "IN");
-
-      // Apply INSIDE Duration Filter
-      if (insideDurationFilter !== "ALL") {
-        list = list.filter((v) => {
-          if (!v.timeIn) return false;
-          const durationHours = (new Date().getTime() - v.timeIn.getTime()) / (1000 * 60 * 60);
-          if (insideDurationFilter === "<24") return durationHours < 24;
-          if (insideDurationFilter === "1-3") return durationHours >= 24 && durationHours <= 72;
-          if (insideDurationFilter === ">5") return durationHours > 120;
-          return true;
-        });
-      }
+      list = Object.values(last)
+        .filter((l) => l.status === "IN" && l.timeIn)
+        .map((l) => {
+          const durationHours = (new Date().getTime() - l.timeIn!.getTime()) / (1000 * 60 * 60);
+          return { ...l, durationHours };
+        })
+        .filter((l) => l.durationHours >= minDurationHours); // Apply visible duration filter
     } else if (mode === "VEHICLE_LIST") {
       list = logs;
     }
@@ -190,9 +189,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-3">
         <div className="flex items-center gap-3">
           <Image src="/images/zcmc1.png" alt="ZCMC Logo" width={50} height={50} />
-          <h1 className="text-2xl sm:text-3xl font-bold">
-            ZCMC Vehicle E-Logbook
-          </h1>
+          <h1 className="text-2xl sm:text-3xl font-bold">ZCMC Vehicle E-Logbook</h1>
         </div>
         <div className="flex gap-2">
           <button
@@ -223,6 +220,7 @@ export default function DashboardPage() {
               } else {
                 setMode(b.mode as DashboardMode);
                 setSearchQuery("");
+                if (b.mode === "INSIDE") setMinDurationHours(0); // reset duration
               }
             }}
             className={`rounded-xl border p-4 flex flex-col items-center justify-center
@@ -232,9 +230,7 @@ export default function DashboardPage() {
             <div className="relative h-24 w-24 mb-2">
               <Image src={b.image} alt={b.label} fill className="object-contain" />
             </div>
-            <span className="font-semibold text-gray-700 text-sm text-center">
-              {b.label}
-            </span>
+            <span className="font-semibold text-gray-700 text-sm text-center">{b.label}</span>
           </button>
         ))}
       </div>
@@ -242,11 +238,7 @@ export default function DashboardPage() {
       {/* FILTER BAR */}
       {(mode !== "NONE" && mode !== "VEHICLE_HISTORY") && (
         <div className="mt-6 bg-white rounded shadow p-4 flex flex-wrap gap-2 items-center">
-          {(mode === "ENTRY" ||
-            mode === "EXIT" ||
-            mode === "HOURLY_TRAFFIC" ||
-            mode === "PIE_REGISTERED" ||
-            mode === "BAR_DURATION") && (
+          {(mode === "ENTRY" || mode === "EXIT" || mode === "HOURLY_TRAFFIC" || mode === "PIE_REGISTERED" || mode === "BAR_DURATION") && (
             <>
               <input
                 type="date"
@@ -263,10 +255,7 @@ export default function DashboardPage() {
             </>
           )}
 
-          {(mode === "ENTRY" ||
-            mode === "EXIT" ||
-            mode === "INSIDE" ||
-            mode === "VEHICLE_LIST") && (
+          {(mode === "ENTRY" || mode === "EXIT" || mode === "INSIDE" || mode === "VEHICLE_LIST") && (
             <>
               <input
                 type="text"
@@ -276,18 +265,14 @@ export default function DashboardPage() {
                 className="border rounded px-3 py-1 w-full sm:w-64"
               />
               {mode === "INSIDE" && (
-                <select
-                  value={insideDurationFilter}
-                  onChange={(e) =>
-                    setInsideDurationFilter(e.target.value as any)
-                  }
-                  className="border rounded px-3 py-1"
-                >
-                  <option value="ALL">All Durations</option>
-                  <option value="<24">Less than 24 hrs</option>
-                  <option value="1-3">1–3 days</option>
-                  <option value=">5">More than 5 days</option>
-                </select>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="Min hours inside"
+                  value={minDurationHours}
+                  onChange={(e) => setMinDurationHours(Number(e.target.value))}
+                  className="border rounded px-3 py-1 w-36"
+                />
               )}
             </>
           )}
@@ -305,43 +290,28 @@ export default function DashboardPage() {
                 <th className="border px-4 py-2">Type</th>
                 <th className="border px-4 py-2">Color</th>
                 <th className="border px-4 py-2">Details</th>
-                <th className="border px-4 py-2">
-                  {mode === "INSIDE" ? "Registration / Duration" : "Date & Time"}
-                </th>
+                <th className="border px-4 py-2">{mode === "INSIDE" ? "Registration" : "Date & Time"}</th>
               </tr>
             </thead>
             <tbody>
-              {filteredList.map((v) => {
-                let isLongInside = false;
-                let durationText = "";
-                if (mode === "INSIDE" && v.timeIn) {
-                  const durationHours = (new Date().getTime() - v.timeIn.getTime()) / (1000 * 60 * 60);
-                  isLongInside = durationHours >= 120; // 5 days threshold
-                  durationText = durationHours >= 24
-                    ? `${(durationHours / 24).toFixed(2)} days`
-                    : `${durationHours.toFixed(2)} hrs`;
-                }
-
-                return (
-                  <tr
-                    key={`${v.plateNumber}-${getLogTime(v)?.getTime()}`}
-                    className={isLongInside ? "bg-red-100" : ""}
-                  >
-                    <td className="border px-4 py-2">{v.plateNumber}</td>
-                    <td className="border px-4 py-2">{v.ownerName || "—"}</td>
-                    <td className="border px-4 py-2">{v.vehicleType || "—"}</td>
-                    <td className="border px-4 py-2">{v.color || "—"}</td>
-                    <td className="border px-4 py-2">{v.details || "—"}</td>
-                    <td className="border px-4 py-2">
-                      {mode === "INSIDE"
-                        ? `${v.registered ? "Registered" : "Unregistered"} (${durationText})`
-                        : mode === "ENTRY"
-                        ? v.timeIn?.toLocaleString()
-                        : v.timeOut?.toLocaleString()}
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredList.map((v) => (
+                <tr key={`${v.plateNumber}-${getLogTime(v)?.getTime()}`}>
+                  <td className="border px-4 py-2">{v.plateNumber}</td>
+                  <td className="border px-4 py-2">{v.ownerName || "—"}</td>
+                  <td className="border px-4 py-2">{v.vehicleType || "—"}</td>
+                  <td className="border px-4 py-2">{v.color || "—"}</td>
+                  <td className="border px-4 py-2">{v.details || "—"}</td>
+                  <td className="border px-4 py-2">
+                    {mode === "INSIDE"
+                      ? v.registered
+                        ? "Registered"
+                        : "Unregistered"
+                      : mode === "ENTRY"
+                      ? v.timeIn?.toLocaleString()
+                      : v.timeOut?.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -353,29 +323,21 @@ export default function DashboardPage() {
           <PieChartRegistered logs={chartLogs} />
         </div>
       )}
-
       {mode === "BAR_DURATION" && (
         <div className="mt-6 bg-white rounded shadow p-4">
           <BarChartDuration logs={logs} />
         </div>
       )}
-
       {mode === "HOURLY_TRAFFIC" && (
         <div className="mt-6 bg-white rounded shadow p-4">
-          <TrafficGraph
-            logs={chartLogs}
-            fromDate={new Date(fromDate)}
-            toDate={new Date(toDate)}
-          />
+          <TrafficGraph logs={chartLogs} fromDate={new Date(fromDate)} toDate={new Date(toDate)} />
         </div>
       )}
 
       {/* VEHICLE HISTORY */}
       {mode === "VEHICLE_HISTORY" && (
         <div className="mt-6 bg-white rounded shadow p-6">
-          <h2 className="text-xl font-semibold text-center mb-4">
-            Vehicle History Lookup
-          </h2>
+          <h2 className="text-xl font-semibold text-center mb-4">Vehicle History Lookup</h2>
           <div className="flex justify-center gap-2 mb-4">
             <input
               className="border rounded px-3 py-1 uppercase text-center"
@@ -391,11 +353,7 @@ export default function DashboardPage() {
               {historyLoading ? "Fetching..." : "Lookup"}
             </button>
           </div>
-
-          {historyError && (
-            <p className="text-red-600 text-center">{historyError}</p>
-          )}
-
+          {historyError && <p className="text-red-600 text-center">{historyError}</p>}
           {historyLogs.length > 0 && (
             <div className="overflow-x-auto mt-4">
               <table className="min-w-full text-center border">
@@ -419,9 +377,7 @@ export default function DashboardPage() {
                       <td className="border px-2 py-1">{l.vehicleType || "—"}</td>
                       <td className="border px-2 py-1">{l.color || "—"}</td>
                       <td className="border px-2 py-1">{l.details || "—"}</td>
-                      <td className="border px-2 py-1">
-                        {l.time?.toLocaleString() || "—"}
-                      </td>
+                      <td className="border px-2 py-1">{l.time?.toLocaleString() || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
